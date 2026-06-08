@@ -348,36 +348,54 @@ export default function OperatorPanel() {
 
     setUploadError('');
     try {
-      // 1. Permanently Upload to the full-stack server
-      const encodedName = encodeURIComponent(file.name);
-      const srvRes = await fetch(`/api/upload?name=${encodedName}`, {
-        method: 'POST',
-        body: file,
-        headers: {
-          'Content-Type': 'application/octet-stream'
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const base64Data = event.target?.result as string;
+
+          // 1. Permanently Upload to the full-stack server using Base64 payload
+          const srvRes = await fetch('/api/upload-base64', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              name: file.name,
+              base64: base64Data
+            })
+          });
+
+          if (!srvRes.ok) {
+            const serverMsg = await srvRes.text();
+            throw new Error(serverMsg || "Servidor rejeitou o arquivo MP3.");
+          }
+
+          // 2. Also save to local browser IndexedDB cache as dynamic standalone fallback
+          try {
+            await saveAudioFile(file.name, file);
+          } catch (dbErr) {
+            console.warn("IndexedDB secondary write omitted:", dbErr);
+          }
+
+          // Reload files list
+          await loadCustomFilesFromDB();
+
+          // Notify player screens
+          if (broadcastChannelRef.current) {
+            broadcastChannelRef.current.postMessage({ type: 'REFRESH_ASSETS' });
+          }
+        } catch (err: any) {
+          setUploadError('Falha ao salvar seu áudio MP3 no projeto: ' + (err.message || err));
         }
-      });
-      
-      if (!srvRes.ok) {
-        throw new Error("Server rejected binary file upload");
-      }
+      };
 
-      // 2. Also save to local browser IndexedDB cache as dynamic standalone fallback
-      try {
-        await saveAudioFile(file.name, file);
-      } catch (dbErr) {
-        console.warn("IndexedDB secondary write omitted:", dbErr);
-      }
+      reader.onerror = () => {
+        setUploadError('Falha ao ler o arquivo físico.');
+      };
 
-      // Reload files list
-      await loadCustomFilesFromDB();
-
-      // Notify player screens
-      if (broadcastChannelRef.current) {
-        broadcastChannelRef.current.postMessage({ type: 'REFRESH_ASSETS' });
-      }
+      reader.readAsDataURL(file);
     } catch (err: any) {
-      setUploadError('Falha ao salvar seu áudio MP3 no projeto: ' + (err.message || err));
+      setUploadError('Erro ao iniciar o envio de áudio: ' + (err.message || err));
     }
   };
 

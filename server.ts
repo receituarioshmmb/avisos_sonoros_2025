@@ -51,7 +51,29 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // Upload binary MP3 file (accepts octet-stream directly for maximum speed and simplicity)
+  // Upload Base64 MP3 file (highly reliable, bypasses intermediate proxy chunk limitations)
+  app.post('/api/upload-base64', express.json({ limit: '25mb' }), (req, res) => {
+    const { name, base64 } = req.body;
+    if (!name || !base64) {
+      return res.status(400).send('Name or base64 data is missing');
+    }
+
+    try {
+      // Remove data URL prefix if present
+      const base64Content = base64.includes(',') ? base64.split(',')[1] : base64;
+      const buffer = Buffer.from(base64Content, 'base64');
+      const filePath = path.join(uploadsDir, name);
+
+      fs.writeFileSync(filePath, buffer);
+      console.log(`Saved MP3 file successfully via Base64: ${name}`);
+      res.json({ success: true, name });
+    } catch (err: any) {
+      console.error(`Error saving Base64 upload stream to file: ${err.message}`);
+      res.status(500).send(err.message || 'Error writing file');
+    }
+  });
+
+  // Legacy binary MP3 upload handler
   app.post('/api/upload', (req, res) => {
     const fileName = req.query.name as string;
     if (!fileName) {

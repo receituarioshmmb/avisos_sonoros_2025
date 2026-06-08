@@ -61,15 +61,8 @@ export default function PlayerView() {
             const isPlayAction = serverState.action === 'PLAY';
 
             if (lastProcessedTimestampRef.current === -1) {
-              // On initial load, we want to play the current active audio ONLY if it was triggered very recently (e.g., less than 45 seconds ago)
-              const isRecent = isPlayAction && (Date.now() - serverState.timestamp < 45000);
-              if (isRecent) {
-                // Set to one less than the server timestamp so the comparison immediately triggers play
-                lastProcessedTimestampRef.current = serverState.timestamp - 1;
-              } else {
-                // Mark as processed without playing
-                lastProcessedTimestampRef.current = serverState.timestamp;
-              }
+              // Set the initial baseline using the server's current timestamp to avoid client clock drift issues
+              lastProcessedTimestampRef.current = serverState.timestamp;
             }
 
             if (serverState.timestamp > lastProcessedTimestampRef.current) {
