@@ -58,31 +58,46 @@ export default function PlayerView() {
           const serverState = data.state;
 
           if (serverState) {
-            // First run: save server current action timestamp so we don't play stale previous audio
-            if (lastProcessedTimestampRef.current === -1) {
-              lastProcessedTimestampRef.current = serverState.timestamp;
-            } else if (serverState.timestamp > lastProcessedTimestampRef.current) {
-              lastProcessedTimestampRef.current = serverState.timestamp;
+            const isPlayAction = serverState.action === 'PLAY';
+            // Only process state if audio is unlocked OR if it is a stop/set volume action (which elements can handle in state safely)
+            const canProcess = isAudioUnlockedRef.current || !isPlayAction;
 
-              if (serverState.action === 'PLAY') {
-                setVolume(serverState.volume ?? 0.8);
-                setIsTTS(serverState.isTTS || false);
-                setCustomText(serverState.customText || '');
+            if (canProcess) {
+              if (lastProcessedTimestampRef.current === -1) {
+                // On initial load, we want to play the current active audio ONLY if it was triggered very recently (e.g., less than 45 seconds ago)
+                const isRecent = isPlayAction && (Date.now() - serverState.timestamp < 45000);
+                if (isRecent) {
+                  // Set to one less than the server timestamp so the comparison immediately triggers play
+                  lastProcessedTimestampRef.current = serverState.timestamp - 1;
+                } else {
+                  // Mark as processed without playing
+                  lastProcessedTimestampRef.current = serverState.timestamp;
+                }
+              }
 
-                triggerReceiverPlay(
-                  serverState.currentAnnouncement,
-                  serverState.currentAnnouncement?.isCustom || serverState.currentAnnouncement?.category === 'custom' || false,
-                  serverState.volume,
-                  serverState.fallbackMode,
-                  serverState.isTTS,
-                  serverState.customText
-                );
-              } else if (serverState.action === 'STOP') {
-                stopAllPlayback();
-              } else if (serverState.action === 'SET_VOLUME') {
-                setVolume(serverState.volume ?? 0.8);
-                if (audioRef.current) {
-                  audioRef.current.volume = serverState.volume;
+              if (serverState.timestamp > lastProcessedTimestampRef.current) {
+                lastProcessedTimestampRef.current = serverState.timestamp;
+
+                if (serverState.action === 'PLAY') {
+                  setVolume(serverState.volume ?? 0.8);
+                  setIsTTS(serverState.isTTS || false);
+                  setCustomText(serverState.customText || '');
+
+                  triggerReceiverPlay(
+                    serverState.currentAnnouncement,
+                    serverState.currentAnnouncement?.isCustom || serverState.currentAnnouncement?.category === 'custom' || false,
+                    serverState.volume,
+                    serverState.fallbackMode,
+                    serverState.isTTS,
+                    serverState.customText
+                  );
+                } else if (serverState.action === 'STOP') {
+                  stopAllPlayback();
+                } else if (serverState.action === 'SET_VOLUME') {
+                  setVolume(serverState.volume ?? 0.8);
+                  if (audioRef.current) {
+                    audioRef.current.volume = serverState.volume;
+                  }
                 }
               }
             }

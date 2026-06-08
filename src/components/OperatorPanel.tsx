@@ -3,7 +3,7 @@ import {
   Play, Square, Trash2, Megaphone, Clock, Plus, Search, 
   FileAudio, Tv, Settings, Activity, Sparkles, ExternalLink, 
   X, ChevronRight, Mic, Info, Bell, Wifi, Layers, PlusCircle, AlertTriangle,
-  Volume2, VolumeX
+  Volume2, VolumeX, Copy, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Announcement, QueueItem, SyncMessage } from '../types';
@@ -33,6 +33,7 @@ export default function OperatorPanel() {
   const [currentLocalPlaying, setCurrentLocalPlaying] = useState<string | null>(null);
   const [currentBroadcasting, setCurrentBroadcasting] = useState<string | null>(null);
   const [lastPlayedItem, setLastPlayedItem] = useState<string>('');
+  const [copied, setCopied] = useState<boolean>(false);
   
   // Text to Speech Custom Announcer State
   const [ttsText, setTtsText] = useState('');
@@ -620,12 +621,51 @@ export default function OperatorPanel() {
             {/* CTA to open second tab */}
             <button 
               onClick={openPlayerTab}
-              className="mt-3.5 w-full bg-slate-900 hover:bg-slate-800 active:scale-95 text-white py-2 px-3 rounded-lg font-sans text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-sm"
+              className="mt-3.5 w-full bg-slate-900 hover:bg-slate-800 active:scale-95 text-white py-2 px-3 rounded-lg font-sans text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
               id="btn_open_player_tab"
             >
               <Tv className="h-3.5 w-3.5" /> Abrir Tela do Receptor
               <ExternalLink className="h-3 w-3 text-slate-300" />
             </button>
+
+            {/* Cross-PC Sync Link Assistant */}
+            <div className="mt-4 pt-3.5 border-t border-slate-200/80 space-y-2 text-slate-700">
+              <p className="text-[10px] uppercase font-bold text-orange-600 font-sans tracking-wide">Como conectar outro PC?</p>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Para o som sair nas caixas acústicas de outro computador, abra a tela do receptor **neste mesmo endereço** no navegador daquele PC:
+              </p>
+              <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={(() => {
+                    try {
+                      return window.location.origin + '/?mode=player';
+                    } catch {
+                      return '/?mode=player';
+                    }
+                  })()} 
+                  className="bg-transparent text-[10px] text-slate-600 font-mono flex-1 border-none focus:outline-none select-all px-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      navigator.clipboard.writeText(window.location.origin + '/?mode=player');
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    } catch (e) {}
+                  }}
+                  className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded transition-all cursor-pointer"
+                  title="Copiar link"
+                >
+                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+              <p className="text-[9px] text-amber-700 leading-relaxed font-sans mt-0.5">
+                ⚠️ Ambos os computadores devem usar o <strong>mesmo domínio/endereço</strong> para sincronizar.
+              </p>
+            </div>
           </div>
 
           {/* Audio Output Selector */}
