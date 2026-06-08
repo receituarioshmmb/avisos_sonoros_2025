@@ -69,24 +69,54 @@ export function speakPortugueseText(text: string, volume: number = 1.0, onEnd?: 
     return;
   }
 
-  // Cancel prior speech
+  // Cancel prior speech to prevent overlap
   window.speechSynthesis.cancel();
 
   // Create utterance with portuguese config
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'pt-BR';
-  utterance.rate = 0.95; // Slightly slower for crisp hospital announcements
-  utterance.pitch = 1.0;
+  // A calm, serene, and slower rate is highly reassuring (standard is 1.0; 0.85 is beautifully paced)
+  utterance.rate = 0.83; 
+  // Pitch set slightly above 1.0 for a warm, soft, and crystal-clear high-quality tone
+  utterance.pitch = 1.03; 
   utterance.volume = volume;
 
-  // Attempt to select a natural portuguese speaker
+  // Retrieve available voices on the current browser device
   const voices = window.speechSynthesis.getVoices();
-  const ptVoice = voices.find(v => 
+  const ptVoices = voices.filter(v => 
     v.lang.toLowerCase().includes('pt-br') || 
     v.lang.toLowerCase().startsWith('pt')
   );
-  if (ptVoice) {
-    utterance.voice = ptVoice;
+
+  // Preference list for known pleasant Portuguese female speakers or Google/Microsoft natural voices
+  const femaleKeywords = ['google', 'maria', 'luciana', 'heloisa', 'francisca', 'victoria', 'joana', 'daniel', 'female', 'mulher', 'zira', 'samantha', 'soft', 'narrator'];
+
+  // 1. Look for a pt-BR female voice
+  let selectedVoice = ptVoices.find(v => {
+    const name = v.name.toLowerCase();
+    return v.lang.toLowerCase().includes('pt-br') && femaleKeywords.some(kw => name.includes(kw));
+  });
+
+  // 2. Look for any pt female voice
+  if (!selectedVoice) {
+    selectedVoice = ptVoices.find(v => {
+      const name = v.name.toLowerCase();
+      return femaleKeywords.some(kw => name.includes(kw));
+    });
+  }
+
+  // 3. Look for a general Google pt-BR (Google's Brazilian voice is extremely high-quality and female)
+  if (!selectedVoice) {
+    selectedVoice = ptVoices.find(v => v.name.toLowerCase().includes('google') && v.lang.toLowerCase().includes('pt-br'));
+  }
+
+  // 4. Default to any pt-BR or pt voice
+  if (!selectedVoice && ptVoices.length > 0) {
+    selectedVoice = ptVoices[0];
+  }
+
+  if (selectedVoice) {
+    utterance.voice = selectedVoice;
   }
 
   if (onEnd) {

@@ -2,7 +2,7 @@ export interface Announcement {
   id: string;
   title: string;
   audioUrl: string;
-  category: 'success' | 'warning' | 'danger';
+  category: 'success' | 'warning' | 'danger' | 'custom';
   description: string;
   duration?: number; // estimated duration in seconds
 }

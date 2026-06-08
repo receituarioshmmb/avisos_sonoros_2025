@@ -11,7 +11,7 @@ import PlayerView from './components/PlayerView';
 type ViewMode = 'operator' | 'player' | 'split';
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>('split'); // default to split in dev for testing ease inside iframe!
+  const [viewMode, setViewMode] = useState<ViewMode>('operator'); // default to operator console on main entry
 
   // Check URL query parameters for override modes (e.g. ?mode=player or ?mode=operator)
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function App() {
               className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-sans font-bold cursor-pointer transition-all ${
                 viewMode === 'operator'
                   ? 'bg-slate-700 text-white shadow font-extrabold'
-                  : 'text-slate-450 hover:text-white'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               <Sliders className="h-3.5 w-3.5" />
@@ -76,7 +76,7 @@ export default function App() {
               className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-sans font-bold cursor-pointer transition-all ${
                 viewMode === 'player'
                   ? 'bg-indigo-600 text-white shadow font-extrabold'
-                  : 'text-slate-450 hover:text-white'
+                  : 'text-slate-400 hover:text-white'
               }`}
             >
               <Tv className="h-3.5 w-3.5" />

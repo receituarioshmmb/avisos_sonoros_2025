@@ -322,7 +322,7 @@ export default function PlayerView() {
   }, [volume]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col p-4 sm:p-6 md:p-8" id="player_terminal_viewport">
+    <div className="min-h-full flex-1 w-full bg-slate-50 text-slate-800 flex flex-col p-4 sm:p-6 md:p-8" id="player_terminal_viewport">
       
       {/* HEADER: Dynamic Status indicator */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-5" id="player_top_panel">
@@ -395,7 +395,7 @@ export default function PlayerView() {
                       currentAnnouncement.title
                     )}
                   </h2>
-                  <p className="text-slate-505 text-sm max-w-lg mx-auto font-sans font-medium">
+                  <p className="text-slate-500 text-sm max-w-lg mx-auto font-sans font-medium">
                     {isTTS ? "Anúncio por voz sintetizado em tempo real pelas caixas do hospital." : currentAnnouncement.description}
                   </p>
                 </div>
@@ -519,7 +519,7 @@ export default function PlayerView() {
             )}
           </div>
 
-          <div className="bg-slate-550/10 p-3 rounded-xl border border-slate-200 text-[10px] text-slate-500 space-y-1 font-mono leading-relaxed">
+          <div className="bg-slate-500/10 p-3 rounded-xl border border-slate-200 text-[10px] text-slate-500 space-y-1 font-mono leading-relaxed">
             <p className="font-sans font-bold text-[11px] text-slate-600 mb-1 flex items-center gap-1">
               <CheckCircle className="h-3 w-3 text-emerald-600" /> Como Funciona?
             </p>
