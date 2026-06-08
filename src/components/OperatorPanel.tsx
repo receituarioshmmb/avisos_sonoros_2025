@@ -53,11 +53,15 @@ export default function OperatorPanel() {
     const pChan = new BroadcastChannel('hmmb_audio_system');
     broadcastChannelRef.current = pChan;
 
+    let lastLocalPongTime = 0;
+
     pChan.onmessage = (event) => {
       const msg = event.data;
       if (msg.type === 'PONG') {
+        lastLocalPongTime = Date.now();
         setIsReceiverConnected(true);
       } else if (msg.type === 'RECEIVER_STATUS') {
+        lastLocalPongTime = msg.payload?.active ? Date.now() : 0;
         setIsReceiverConnected(msg.payload?.active || false);
         setIsReceiverUnlocked(msg.payload?.isAudioUnlocked !== false);
         if (msg.payload?.playingId) {
@@ -75,11 +79,13 @@ export default function OperatorPanel() {
 
       // Remote cross-PC server status query
       try {
-        const res = await fetch('/api/receiver');
+        const res = await fetch(`/api/receiver?_t=${Date.now()}`);
         if (res.ok) {
           const remoteStatus = await res.json();
-          // Merged state: active if either local tab is open OR server registers active receiver
-          setIsReceiverConnected(prev => prev || remoteStatus.active);
+          const isLocalOnline = (Date.now() - lastLocalPongTime) < 5000;
+          const mergedOnline = isLocalOnline || remoteStatus.active;
+          
+          setIsReceiverConnected(mergedOnline);
           setIsReceiverUnlocked(remoteStatus.isAudioUnlocked);
           if (remoteStatus.playingId) {
             setCurrentBroadcasting(remoteStatus.playingId);
@@ -565,7 +571,7 @@ export default function OperatorPanel() {
         <div>
           {/* HMMB Header */}
           <div className="flex items-center gap-3 mb-6" id="hmmb_header_logo_area">
-            <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md shadow-emerald-100">
+            <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center text-white font-bold shadow-md shadow-orange-100">
               H
             </div>
             <div>
@@ -581,14 +587,14 @@ export default function OperatorPanel() {
           {/* Quick System Connection Indicator */}
           <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-5 animate-fade-in" id="sync_status_indicators">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 font-sans flex items-center gap-2 mb-2">
-              <Activity className="h-3.5 w-3.5 text-emerald-500" /> STATUS DE CONEXÃO
+              <Activity className="h-3.5 w-3.5 text-orange-500" /> STATUS DE CONEXÃO
             </h2>
             <div className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-slate-600">Tela Secundária:</span>
                 {isReceiverConnected ? (
-                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-md font-sans text-[10px] border border-emerald-200 font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> CONECTADO
+                  <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 px-2.5 py-0.5 rounded-md font-sans text-[10px] border border-orange-200 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> CONECTADO
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-md font-sans text-[10px] border border-amber-200 font-bold">
@@ -667,7 +673,7 @@ export default function OperatorPanel() {
                   setVolume(Number(e.target.value));
                   if (isMuted) setIsMuted(false);
                 }}
-                className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
               />
             </div>
           </div>
@@ -676,11 +682,11 @@ export default function OperatorPanel() {
           <div className="flex items-center justify-between text-xs bg-slate-50 p-3 rounded-xl border border-slate-200" id="fallback_voice_override_setting">
             <span className="text-slate-600 font-medium font-sans">Sintetizador por Voz</span>
             <button
-              onClick={() => setFallbackMode(!fallbackMode)}
-              className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${
-                fallbackMode ? 'bg-emerald-600' : 'bg-slate-300'
-              }`}
-            >
+               onClick={() => setFallbackMode(!fallbackMode)}
+               className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${
+                 fallbackMode ? 'bg-orange-600' : 'bg-slate-300'
+               }`}
+             >
               <span
                 className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
                   fallbackMode ? 'translate-x-6' : 'translate-x-1'
@@ -705,19 +711,19 @@ export default function OperatorPanel() {
         {/* TOP STATUS BAR matching clean minimalist layout */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4" id="live_broadcasting_strip">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100">
+            <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center text-orange-600 shadow-sm border border-orange-100">
               <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
               </span>
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-800 font-sans tracking-tight">Monitor de Transmissão Principal</h2>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 mt-0.5">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
                   Local: {currentLocalPlaying ? (
-                    <strong className="text-emerald-600 font-sans">"{currentLocalPlaying}"</strong>
+                    <strong className="text-orange-600 font-sans">"{currentLocalPlaying}"</strong>
                   ) : <span className="text-slate-400 font-medium">Livre / Ocioso</span>}
                 </span>
                 <span className="hidden sm:inline text-slate-300">|</span>
@@ -764,7 +770,7 @@ export default function OperatorPanel() {
                     placeholder="Filtrar por nome do anúncio..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-sans w-full sm:w-60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium"
+                    className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-sans w-full sm:w-60 focus:outline-none focus:ring-2 focus:ring-orange-500/20 font-medium"
                   />
                 </div>
               </div>
@@ -773,7 +779,7 @@ export default function OperatorPanel() {
               <div className="flex flex-wrap items-center gap-1.5 pt-1 border-b border-slate-100 pb-3" id="category_pills_filters">
                 {[
                   { id: 'all', label: 'Todos os Áudios', color: 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/70' },
-                  { id: 'success', label: 'Saudações & Boas-Vindas', color: 'bg-emerald-50/40 hover:bg-emerald-50 text-emerald-700 border border-emerald-100' },
+                  { id: 'success', label: 'Saudações & Boas-Vindas', color: 'bg-orange-50/40 hover:bg-orange-50 text-orange-700 border border-orange-100' },
                   { id: 'warning', label: 'Protocolos & Orientação', color: 'bg-amber-50/40 hover:bg-amber-50 text-amber-700 border border-amber-100' },
                   { id: 'danger', label: 'Chamadas e Emergência', color: 'bg-rose-50/40 hover:bg-rose-50 text-rose-700 border border-rose-100' },
                   { id: 'custom', label: 'Meus Áudios MP3', color: 'bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 border border-indigo-100' }
@@ -806,7 +812,7 @@ export default function OperatorPanel() {
                         onClick={() => playAnnouncement(item)}
                         className={`p-4 rounded-xl border text-left transition-all hover:translate-y-[-1px] hover:shadow-md cursor-pointer group flex flex-col justify-between min-h-[140px] ${
                           isSuccess
-                            ? 'bg-white border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/30' 
+                            ? 'bg-white border-slate-200 hover:border-orange-500 hover:bg-orange-50/30' 
                             : isWarning
                             ? 'bg-white border-slate-200 hover:border-amber-500 hover:bg-amber-50/30'
                             : isCustom
@@ -817,7 +823,7 @@ export default function OperatorPanel() {
                         <div className="space-y-1">
                           <div className="flex items-center justify-between gap-1.5">
                             <span className={`text-[9px] uppercase tracking-wider font-bold ${
-                              isSuccess ? 'text-emerald-600' : isWarning ? 'text-amber-600' : isCustom ? 'text-indigo-600' : 'text-rose-600'
+                              isSuccess ? 'text-orange-600' : isWarning ? 'text-amber-600' : isCustom ? 'text-indigo-600' : 'text-rose-600'
                             }`}>
                               {isSuccess ? 'GERAL' : isWarning ? 'SEGURANÇA & LOGÍSTICA' : isCustom ? 'ARQUIVO MP3 ENVIADO' : 'URGENTE'}
                             </span>
@@ -848,7 +854,7 @@ export default function OperatorPanel() {
                           </button>
                           
                           <span className={`text-xs px-2.5 py-1 rounded-md font-bold transition-all text-white flex items-center gap-1 ${
-                            isSuccess ? 'bg-emerald-600 group-hover:bg-emerald-700' :
+                            isSuccess ? 'bg-orange-600 group-hover:bg-orange-700' :
                             isWarning ? 'bg-amber-500 group-hover:bg-amber-600' : 
                             isCustom ? 'bg-indigo-600 group-hover:bg-indigo-700' : 'bg-rose-600 group-hover:bg-rose-700'
                           }`}>
@@ -872,7 +878,7 @@ export default function OperatorPanel() {
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4" id="custom_uploaded_files_area">
               <div>
                 <h3 className="text-base font-bold text-slate-800 font-sans flex items-center gap-2">
-                  <FileAudio className="h-5 w-5 text-emerald-600" /> Meus Arquivos MP3 Enviados
+                  <FileAudio className="h-5 w-5 text-orange-600" /> Meus Arquivos MP3 Enviados
                 </h3>
                 <p className="text-xs text-slate-400 font-medium">Envie arquivos de áudio sob demanda para arquivar localmente</p>
               </div>
@@ -887,9 +893,9 @@ export default function OperatorPanel() {
                     className="hidden"
                   />
                   <div className="space-y-1.5">
-                    <PlusCircle className="h-8 w-8 text-emerald-600 mx-auto" />
+                    <PlusCircle className="h-8 w-8 text-orange-600 mx-auto" />
                     <p className="text-xs font-semibold text-slate-700">
-                      Clique para <span className="text-emerald-700 underline">enviar novo áudio MP3</span>
+                      Clique para <span className="text-orange-705 underline">enviar novo áudio MP3</span>
                     </p>
                     <p className="text-[10px] text-slate-400">Armazenamento local seguro ilimitado de até 8MB</p>
                   </div>
@@ -917,7 +923,7 @@ export default function OperatorPanel() {
                     return (
                       <div key={idx} className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-xs transition-all hover:shadow-sm">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                          <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100">
                             <FileAudio className="h-4.5 w-4.5" />
                           </div>
                           <div className="min-w-0">
@@ -978,7 +984,7 @@ export default function OperatorPanel() {
                   onChange={(e) => setTtsText(e.target.value)}
                   placeholder="Ex: Dr. Carlos Eduardo comparecer à sala de triagem do Pronto Socorro..."
                   rows={4}
-                  className="w-full text-xs font-sans p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium leading-relaxed"
+                  className="w-full text-xs font-sans p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 font-medium leading-relaxed"
                 />
                 
                 {/* Category choices */}
@@ -995,7 +1001,7 @@ export default function OperatorPanel() {
                         onClick={() => setTtsCategory(cat.id as any)}
                         className={`py-1 rounded text-center cursor-pointer transition-all ${
                           ttsCategory === cat.id
-                            ? cat.id === 'success' ? 'bg-emerald-600 text-white shadow-xs font-bold' :
+                            ? cat.id === 'success' ? 'bg-orange-600 text-white shadow-xs font-bold' :
                               cat.id === 'warning' ? 'bg-amber-500 text-white shadow-xs font-bold' : 'bg-rose-600 text-white shadow-xs font-bold'
                             : 'text-slate-500 hover:text-slate-800'
                         }`}
@@ -1033,7 +1039,7 @@ export default function OperatorPanel() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-bold text-slate-800 font-sans flex items-center gap-2">
-                    <Layers className="h-5 w-5 text-emerald-600" /> Fila de Sonorização
+                    <Layers className="h-5 w-5 text-orange-600" /> Fila de Sonorização
                   </h3>
                   <p className="text-xs text-slate-400 font-medium">Controle de lotes automatizado</p>
                 </div>
@@ -1054,7 +1060,7 @@ export default function OperatorPanel() {
                 <button
                   onClick={() => setAutoPlayQueue(!autoPlayQueue)}
                   className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none ${
-                    autoPlayQueue ? 'bg-emerald-600' : 'bg-slate-300'
+                    autoPlayQueue ? 'bg-orange-600' : 'bg-slate-300'
                   }`}
                 >
                   <span
@@ -1077,7 +1083,7 @@ export default function OperatorPanel() {
                         exit={{ opacity: 0, height: 0 }}
                         className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 ${
                           item.status === 'playing'
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold'
+                            ? 'bg-orange-50 border-orange-200 text-orange-900 font-bold'
                             : 'bg-white border-slate-200 text-slate-700'
                         }`}
                       >
@@ -1095,7 +1101,7 @@ export default function OperatorPanel() {
                           {item.status === 'pending' && (
                             <button
                               onClick={() => triggerPlayItem(item)}
-                              className="text-emerald-700 hover:text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1 rounded-md"
+                              className="text-orange-700 hover:text-orange-600 bg-orange-50 hover:bg-orange-100 p-1 rounded-md"
                               title="Tocar agora"
                             >
                               <Play className="h-3 w-3" />

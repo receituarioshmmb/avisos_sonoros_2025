@@ -88,29 +88,56 @@ export function speakPortugueseText(text: string, volume: number = 1.0, onEnd?: 
     v.lang.toLowerCase().startsWith('pt')
   );
 
-  // Preference list for known pleasant Portuguese female speakers or Google/Microsoft natural voices
-  const femaleKeywords = ['google', 'maria', 'luciana', 'heloisa', 'francisca', 'victoria', 'joana', 'daniel', 'female', 'mulher', 'zira', 'samantha', 'soft', 'narrator'];
+  // Preference list for known pleasant Portuguese female speakers or female indicators
+  const femaleKeywords = [
+    'maria', 'luciana', 'heloisa', 'francisca', 'victoria', 
+    'joana', 'female', 'mulher', 'zira', 'samantha', 'leticia', 
+    'fernanda', 'camila', 'raquel', 'clara', 'ana', 'rita', 
+    'ines', 'carolina', 'yolanda', 'helena', 'claudia'
+  ];
 
-  // 1. Look for a pt-BR female voice
-  let selectedVoice = ptVoices.find(v => {
+  // Specific male keywords to filter out male voices (like Microsoft Daniel / Felipe / Google Male etc.)
+  const maleKeywords = [
+    'daniel', 'felipe', 'ricardo', 'lucas', 'marcos', 
+    'helio', 'male', 'homem', 'guy', 'thiago', 'junior', 
+    'filipe', 'standard', 'narrator-male'
+  ];
+
+  // Filter out any voice with clear male indicators
+  const cleanPtVoices = ptVoices.filter(v => {
     const name = v.name.toLowerCase();
-    return v.lang.toLowerCase().includes('pt-br') && femaleKeywords.some(kw => name.includes(kw));
+    return !maleKeywords.some(mw => name.includes(mw));
   });
 
-  // 2. Look for any pt female voice
+  // 1. Look for pt-BR voices that contain female name keywords or Google's native female voice
+  let selectedVoice = cleanPtVoices.find(v => {
+    const name = v.name.toLowerCase();
+    const isPtBr = v.lang.toLowerCase().includes('pt-br');
+    return isPtBr && (
+      femaleKeywords.some(fw => name.includes(fw)) ||
+      (name.includes('google') && isPtBr) // Chrome's "Google português do Brasil" is high-quality female
+    );
+  });
+
+  // 2. Look for any pt-BR voice that does not have male keywords
   if (!selectedVoice) {
-    selectedVoice = ptVoices.find(v => {
+    selectedVoice = cleanPtVoices.find(v => v.lang.toLowerCase().includes('pt-br'));
+  }
+
+  // 3. Look for any Portuguese voice (e.g., pt-PT) that contains female keywords
+  if (!selectedVoice) {
+    selectedVoice = cleanPtVoices.find(v => {
       const name = v.name.toLowerCase();
-      return femaleKeywords.some(kw => name.includes(kw));
+      return femaleKeywords.some(fw => name.includes(fw));
     });
   }
 
-  // 3. Look for a general Google pt-BR (Google's Brazilian voice is extremely high-quality and female)
-  if (!selectedVoice) {
-    selectedVoice = ptVoices.find(v => v.name.toLowerCase().includes('google') && v.lang.toLowerCase().includes('pt-br'));
+  // 4. Default to any clean pt voice
+  if (!selectedVoice && cleanPtVoices.length > 0) {
+    selectedVoice = cleanPtVoices[0];
   }
 
-  // 4. Default to any pt-BR or pt voice
+  // 5. Ultimate fallback to any pt voice
   if (!selectedVoice && ptVoices.length > 0) {
     selectedVoice = ptVoices[0];
   }
@@ -126,3 +153,14 @@ export function speakPortugueseText(text: string, volume: number = 1.0, onEnd?: 
 
   window.speechSynthesis.speak(utterance);
 }
+
+// Prime the voices cache on module load to prevent empty getVoices() on first speak
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  window.speechSynthesis.getVoices();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.getVoices();
+    };
+  }
+}
+

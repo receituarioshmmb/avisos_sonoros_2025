@@ -53,7 +53,7 @@ export default function App() {
               onClick={() => setViewMode('split')}
               className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 font-sans font-bold cursor-pointer transition-all ${
                 viewMode === 'split'
-                  ? 'bg-emerald-600 text-white shadow font-extrabold scale-102'
+                  ? 'bg-orange-600 text-white shadow font-extrabold scale-102'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -115,11 +115,11 @@ export default function App() {
           <div className="flex-1 flex flex-col xl:flex-row h-full min-h-[calc(100vh-45px)]" id="split_monitor_simulation">
             {/* Split Screen left: Operator Panel */}
             <div className="flex-1 border-b xl:border-b-0 xl:border-r border-slate-200 overflow-auto flex flex-col">
-              <div className="bg-emerald-50 px-4 py-2 border-b border-emerald-100 flex items-center justify-between text-xs font-semibold text-emerald-800">
+              <div className="bg-orange-50 px-4 py-2 border-b border-orange-100 flex items-center justify-between text-xs font-semibold text-orange-850">
                 <span className="flex items-center gap-1.5">
-                  <Sliders className="h-4 w-4" /> MONITOR 1: PAINEL DE CONTROLE (OPERADOR)
+                  <Sliders className="h-4 w-4 text-orange-600" /> MONITOR 1: PAINEL DE CONTROLE (OPERADOR)
                 </span>
-                <span className="text-[10px] font-normal bg-emerald-150 px-2 py-0.5 rounded italic">Dispara comandos de som</span>
+                <span className="text-[10px] font-normal bg-orange-100 px-2 py-0.5 rounded italic text-orange-800">Dispara comandos de som</span>
               </div>
               <div className="flex-1 flex flex-col">
                 <OperatorPanel />
@@ -146,7 +146,7 @@ export default function App() {
       {viewMode === 'split' && (
         <div className="bg-slate-900 text-slate-300 text-xs py-3 px-4 border-t border-slate-800 text-center flex flex-col sm:flex-row items-center justify-center gap-4 font-sans font-medium" id="simulation_explanatory_info_footer">
           <p className="flex items-center justify-center gap-1">
-            <Info className="h-4 w-4 text-emerald-400" /> 
+            <Info className="h-4 w-4 text-orange-500" /> 
             <strong>Modo Simulador de Tela Dupla Atibo!</strong> Experimente clicar em "Tocar" em qualquer aviso à esquerda para vê-lo executando sincronizado à direita.
           </p>
           <div className="flex gap-3">

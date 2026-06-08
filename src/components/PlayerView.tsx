@@ -33,7 +33,7 @@ export default function PlayerView() {
     isAudioUnlockedRef.current = isAudioUnlocked;
   }, [isAudioUnlocked]);
 
-  const lastProcessedTimestampRef = useRef<number>(0);
+  const lastProcessedTimestampRef = useRef<number>(-1);
 
   // Keep currentAnnouncement in a ref to avoid stale closures in the channel listener
   const currentAnnouncementRef = useRef<Announcement | null>(null);
@@ -49,35 +49,41 @@ export default function PlayerView() {
       try {
         const titleToSend = currentAnnouncementRef.current?.title || null;
         // Dual-purpose query: report receiver's live metadata, then receive latest system commands
-        const res = await fetch(`/api/state?active=true&isAudioUnlocked=${isAudioUnlockedRef.current}&playingId=${encodeURIComponent(titleToSend || '')}`);
+        // Prevent browser caching using a cache-busting timestamp
+        const res = await fetch(`/api/state?active=true&isAudioUnlocked=${isAudioUnlockedRef.current}&playingId=${encodeURIComponent(titleToSend || '')}&_t=${Date.now()}`);
         if (!active) return;
 
         if (res.ok) {
           const data = await res.json();
           const serverState = data.state;
 
-          if (serverState && serverState.timestamp > lastProcessedTimestampRef.current) {
-            lastProcessedTimestampRef.current = serverState.timestamp;
+          if (serverState) {
+            // First run: save server current action timestamp so we don't play stale previous audio
+            if (lastProcessedTimestampRef.current === -1) {
+              lastProcessedTimestampRef.current = serverState.timestamp;
+            } else if (serverState.timestamp > lastProcessedTimestampRef.current) {
+              lastProcessedTimestampRef.current = serverState.timestamp;
 
-            if (serverState.action === 'PLAY') {
-              setVolume(serverState.volume ?? 0.8);
-              setIsTTS(serverState.isTTS || false);
-              setCustomText(serverState.customText || '');
+              if (serverState.action === 'PLAY') {
+                setVolume(serverState.volume ?? 0.8);
+                setIsTTS(serverState.isTTS || false);
+                setCustomText(serverState.customText || '');
 
-              triggerReceiverPlay(
-                serverState.currentAnnouncement,
-                serverState.currentAnnouncement?.isCustom || serverState.currentAnnouncement?.category === 'custom' || false,
-                serverState.volume,
-                serverState.fallbackMode,
-                serverState.isTTS,
-                serverState.customText
-              );
-            } else if (serverState.action === 'STOP') {
-              stopAllPlayback();
-            } else if (serverState.action === 'SET_VOLUME') {
-              setVolume(serverState.volume ?? 0.8);
-              if (audioRef.current) {
-                audioRef.current.volume = serverState.volume;
+                triggerReceiverPlay(
+                  serverState.currentAnnouncement,
+                  serverState.currentAnnouncement?.isCustom || serverState.currentAnnouncement?.category === 'custom' || false,
+                  serverState.volume,
+                  serverState.fallbackMode,
+                  serverState.isTTS,
+                  serverState.customText
+                );
+              } else if (serverState.action === 'STOP') {
+                stopAllPlayback();
+              } else if (serverState.action === 'SET_VOLUME') {
+                setVolume(serverState.volume ?? 0.8);
+                if (audioRef.current) {
+                  audioRef.current.volume = serverState.volume;
+                }
               }
             }
           }
@@ -399,18 +405,18 @@ export default function PlayerView() {
       {/* HEADER: Dynamic Status indicator */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-200 pb-5" id="player_top_panel">
         <div className="flex items-center gap-3">
-          <div className="bg-emerald-600 p-2.5 rounded-lg text-white shadow-md shadow-emerald-100 animate-pulse">
+          <div className="bg-orange-600 p-2.5 rounded-lg text-white shadow-md shadow-orange-100 animate-pulse">
             <Radio className="h-5 w-5" />
           </div>
           <div>
             <h1 className="text-lg font-bold font-sans tracking-tight text-slate-800">HMMB • Terminal de Áudio Sincronizado</h1>
-            <p className="text-xs text-emerald-600 font-mono font-medium">Lobby & Som Ambiente Integrado</p>
+            <p className="text-xs text-orange-600 font-mono font-medium">Lobby & Som Ambiente Integrado</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3 text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-600 shadow-sm">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
+            <span className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-ping"></span>
             <span className="font-bold font-sans text-[10px] text-slate-700 uppercase tracking-wider">ESCUTANDO TRANSMISSÕES</span>
           </div>
           <span className="text-slate-300">|</span>
@@ -419,7 +425,7 @@ export default function PlayerView() {
             className="text-slate-600 hover:text-slate-900 flex items-center gap-1 font-sans font-bold transition-colors cursor-pointer"
             title="Sintetizar som de gongo teste"
           >
-            <Volume1 className="h-4 w-4 text-emerald-605" /> Testar Alto-falante
+            <Volume1 className="h-4 w-4 text-orange-600" /> Testar Alto-falante
           </button>
         </div>
       </div>
@@ -431,7 +437,7 @@ export default function PlayerView() {
         <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 md:p-10 flex flex-col items-center justify-between text-center relative overflow-hidden shadow-sm" id="visual_signage_screen">
           
           <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold text-slate-500 shadow-xs">
-            <Volume2 className="h-3 w-3 text-emerald-600 animate-pulse" />
+            <Volume2 className="h-3 w-3 text-orange-600 animate-pulse" />
             VOLUME: {Math.round(volume * 100)}%
           </div>
 
@@ -476,11 +482,11 @@ export default function PlayerView() {
                 <div className="relative flex items-center justify-center h-28 w-28 mt-4">
                   {/* Rotating wave rings */}
                   <div className={`absolute inset-0 rounded-full border-2 border-dashed animate-spin ${
-                    currentAnnouncement.category === 'success' ? 'border-emerald-500/30' :
+                    currentAnnouncement.category === 'success' ? 'border-orange-500/30' :
                     currentAnnouncement.category === 'warning' ? 'border-amber-500/30' : 'border-rose-500/30'
                   }`} style={{ animationDuration: '10s' }} />
                   <div className={`absolute inset-2 rounded-full border border-dashed animate-spin ${
-                    currentAnnouncement.category === 'success' ? 'border-emerald-500/20' :
+                    currentAnnouncement.category === 'success' ? 'border-orange-500/20' :
                     currentAnnouncement.category === 'warning' ? 'border-amber-500/20' : 'border-rose-500/20'
                   }`} style={{ animationDuration: '6s', animationDirection: 'reverse' }} />
                   
@@ -497,7 +503,7 @@ export default function PlayerView() {
                     <motion.div
                       key={i}
                       className={`w-1 rounded-full ${
-                        currentAnnouncement.category === 'success' ? 'bg-emerald-500 animate-pulse' :
+                        currentAnnouncement.category === 'success' ? 'bg-orange-500 animate-pulse' :
                         currentAnnouncement.category === 'warning' ? 'bg-amber-500 animate-pulse' : 'bg-rose-500 animate-pulse'
                       }`}
                       animate={{
@@ -531,7 +537,7 @@ export default function PlayerView() {
                 </div>
                 <button
                   onClick={unlockAudio}
-                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-sans text-xs font-bold rounded-xl shadow-lg shadow-emerald-100 flex items-center gap-2 transition-all cursor-pointer border border-emerald-500/10"
+                  className="px-6 py-3 bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-sans text-xs font-bold rounded-xl shadow-lg shadow-orange-100 flex items-center gap-2 transition-all cursor-pointer border border-orange-500/10"
                 >
                   <Volume2 className="h-3.5 w-3.5 fill-current" /> Ativar Alto-falantes do Receptor
                 </button>
@@ -545,7 +551,7 @@ export default function PlayerView() {
                 className="w-full flex-grow flex flex-col items-center justify-center space-y-4 py-12"
               >
                 <div className="h-16 w-16 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center shadow-inner">
-                  <Radio className="h-7 w-7 text-emerald-600/50 animate-pulse" />
+                  <Radio className="h-7 w-7 text-orange-600/50 animate-pulse" />
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-base font-bold text-slate-700 font-sans">Aguardando Transmissão de Áudio</h3>
@@ -571,7 +577,7 @@ export default function PlayerView() {
                 <div 
                   key={idx} 
                   className={`p-2.5 rounded-xl border text-xs flex flex-col gap-1 transition-all hover:bg-slate-50/50 ${
-                    h.category === 'success' ? 'bg-white border-emerald-100 text-slate-700' :
+                    h.category === 'success' ? 'bg-white border-orange-100 text-slate-700' :
                     h.category === 'warning' ? 'bg-white border-amber-100 text-slate-700' :
                     'bg-white border-rose-100 text-slate-700'
                   }`}
@@ -579,7 +585,7 @@ export default function PlayerView() {
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[9px] text-slate-400 font-bold">{h.time}</span>
                     <span className={`h-1.5 w-1.5 rounded-full ${
-                      h.category === 'success' ? 'bg-emerald-500' :
+                      h.category === 'success' ? 'bg-orange-500' :
                       h.category === 'warning' ? 'bg-amber-500' : 'bg-rose-500'
                     }`} />
                   </div>
@@ -593,7 +599,7 @@ export default function PlayerView() {
 
           <div className="bg-slate-500/10 p-3 rounded-xl border border-slate-200 text-[10px] text-slate-500 space-y-1 font-mono leading-relaxed">
             <p className="font-sans font-bold text-[11px] text-slate-600 mb-1 flex items-center gap-1">
-              <CheckCircle className="h-3 w-3 text-emerald-600" /> Como Funciona?
+              <CheckCircle className="h-3 w-3 text-orange-600" /> Como Funciona?
             </p>
             <p>1. Abra esta tela no terminal conectado às caixas acústicas do hospital.</p>
             <p>2. Opere o som tranquilamente na outra tab.</p>
