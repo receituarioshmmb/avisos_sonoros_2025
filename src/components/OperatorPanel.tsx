@@ -47,16 +47,11 @@ export default function OperatorPanel() {
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentLocalTimerRef = useRef<any>(null);
 
-  // Initialize Broadcast Channel and load Custom Audios from IndexedDB
+  // Setup Sync Channels, verify active Receivers both locally & via central server
   useEffect(() => {
-    // 1. Setup Broadcast Channel
+    // 1. Setup Broadcast Channel fallback
     const pChan = new BroadcastChannel('hmmb_audio_system');
     broadcastChannelRef.current = pChan;
-
-    // Heartbeat mechanism to detect secondary player screen
-    const checkConnection = () => {
-      pChan.postMessage({ type: 'PING' });
-    };
 
     pChan.onmessage = (event) => {
       const msg = event.data;
@@ -73,12 +68,33 @@ export default function OperatorPanel() {
       }
     };
 
-    // Ping every 3 seconds to keep track of connection status
-    const pingInterval = setInterval(checkConnection, 3000);
-    // Initial ping
-    checkConnection();
+    // Heartbeat mechanism: polls both local BroadcastChannel AND server endpoints
+    const checkConnections = async () => {
+      // Direct local browser tab ping
+      pChan.postMessage({ type: 'PING' });
 
-    // 2. Load custom audios from DB
+      // Remote cross-PC server status query
+      try {
+        const res = await fetch('/api/receiver');
+        if (res.ok) {
+          const remoteStatus = await res.json();
+          // Merged state: active if either local tab is open OR server registers active receiver
+          setIsReceiverConnected(prev => prev || remoteStatus.active);
+          setIsReceiverUnlocked(remoteStatus.isAudioUnlocked);
+          if (remoteStatus.playingId) {
+            setCurrentBroadcasting(remoteStatus.playingId);
+          }
+        }
+      } catch (err) {
+        // dynamic fail-open during server restarts
+      }
+    };
+
+    // Keep checking connection status every 3 seconds
+    const pingInterval = setInterval(checkConnections, 3000);
+    checkConnections();
+
+    // Load custom MP3 files initially
     loadCustomFilesFromDB();
 
     return () => {
@@ -88,47 +104,83 @@ export default function OperatorPanel() {
     };
   }, []);
 
-  // Update dynamic URLs when customFiles list shifts
+  // Update dynamic URLs when customFiles list shifts (server files + IndexedDB fallback)
   const loadCustomFilesFromDB = async () => {
     try {
-      const fileNames = await listAudioFiles();
-      const loaded: { name: string; url: string; size: number }[] = [];
-      
-      for (const name of fileNames) {
-        const blob = await getAudioFile(name);
-        if (blob) {
-          loaded.push({
-            name,
-            url: URL.createObjectURL(blob),
-            size: Math.round(blob.size / 1024) // KB
-          });
+      const loaded: { name: string; url: string; size: number; isServer?: boolean }[] = [];
+
+      // A. Pull files saved permanently inside the project's express backend directory
+      try {
+        const srvRes = await fetch('/api/uploads');
+        if (srvRes.ok) {
+          const srvFiles = await srvRes.json();
+          for (const f of srvFiles) {
+            loaded.push({
+              name: f.name,
+              url: f.url, // "/uploads/filename.mp3" served by express server
+              size: f.size,
+              isServer: true
+            });
+          }
         }
+      } catch (srvErr) {
+        console.warn("Unable to fetch custom assets from server", srvErr);
       }
+
+      // B. Merge with browser local storage (IndexedDB) as double-offline fallback
+      try {
+        const fileNames = await listAudioFiles();
+        for (const name of fileNames) {
+          // If already registered from server, avoid duplications
+          if (loaded.some(f => f.name === name)) continue;
+
+          const blob = await getAudioFile(name);
+          if (blob) {
+            loaded.push({
+              name,
+              url: URL.createObjectURL(blob),
+              size: Math.round(blob.size / 1024)
+            });
+          }
+        }
+      } catch (idbErr) {
+        console.warn("Unable to fetch custom assets from IndexedDB", idbErr);
+      }
+
       setCustomFiles(loaded);
     } catch (e) {
-      console.error("Failed to load files from IndexedDB", e);
+      console.error("Failed to load files from storage", e);
     }
   };
 
-  // Broadcast any changes to volume to the Player Screen
+  // Broadcast any changes to volume to both local BroadcastChannel & Backend Server
   useEffect(() => {
+    const volFraction = isMuted ? 0 : volume / 100;
+    
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.postMessage({
         type: 'SET_VOLUME',
-        payload: { volume: isMuted ? 0 : volume / 100 }
+        payload: { volume: volFraction }
       });
     }
+
+    // Server update for secondary computers
+    fetch('/api/set-volume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ volume: volFraction })
+    }).catch(() => {});
   }, [volume, isMuted]);
 
   // Synchronize custom files retrieved from DB to announcements list automatically
   useEffect(() => {
-    const customAnnouncements: Announcement[] = customFiles.map((file, idx) => ({
+    const customAnnouncements: Announcement[] = customFiles.map((file) => ({
       id: 'custom_' + file.name,
       title: file.name.replace(/\.[^/.]+$/, ""), // remove extension
       audioUrl: file.name,
-      category: 'custom' as any, // assigned custom category
+      category: 'custom',
       description: 'Áudio customizado em formato MP3, gravado com sucesso no projeto e mantido entre recarregamentos.',
-      duration: 10, // approximate duration estimate
+      duration: 10,
       isCustom: true
     }));
     
@@ -159,7 +211,6 @@ export default function OperatorPanel() {
     isTTS: boolean = false, 
     ttsTextContent: string = ""
   ) => {
-    // Stop prior local audios & timers
     if (localAudioRef.current) {
       localAudioRef.current.pause();
       localAudioRef.current = null;
@@ -177,7 +228,6 @@ export default function OperatorPanel() {
 
     const handleSpeechFallback = () => {
       if (fallbackMode) {
-        // First play digital chime, then speak title or ttsTextContent
         playSyntheticGong(currentVol).then(() => {
           const phrase = isTTS ? ttsTextContent : `Atenção: ${title}`;
           speakPortugueseText(phrase, currentVol, onPlaybackFinished);
@@ -188,12 +238,10 @@ export default function OperatorPanel() {
     };
 
     if (isTTS) {
-      // Direct Text to speech
       playSyntheticGong(currentVol).then(() => {
         speakPortugueseText(ttsTextContent, currentVol, onPlaybackFinished);
       });
     } else {
-      // Try playing the real audio file
       const audio = new Audio(sourceUrl);
       audio.volume = currentVol;
       localAudioRef.current = audio;
@@ -211,45 +259,72 @@ export default function OperatorPanel() {
     }
   };
 
-  // Main action dispatch hub
-  const playAnnouncement = (item: Announcement, isCustom: boolean = false) => {
+  // Main action dispatch hub for triggers
+  const playAnnouncement = async (item: Announcement, isCustom: boolean = false) => {
     setLastPlayedItem(item.title);
     const actIsCustom = isCustom || item.category === 'custom' || (item as any).isCustom || false;
 
-    // 1. Play Locally if required
+    // Resolve URL for playing locally
+    let audioSrc = item.audioUrl;
+    if (actIsCustom) {
+      const found = customFiles.find(f => f.name === item.audioUrl || f.name === item.title);
+      if (found) {
+        audioSrc = found.url;
+      }
+    }
+
+    // 1. Play Locally if requested
     if (playbackOutput === 'local' || playbackOutput === 'both') {
-      const audioSrc = actIsCustom 
-        ? (customFiles.find(f => f.name === item.audioUrl || f.name === item.title)?.url || item.audioUrl) 
-        : item.audioUrl;
       playLocalAudioEngine(item.title, audioSrc, item.category);
     }
 
-    // 2. Play Remotely if required
+    // 2. Play Remotely if requested (dispatches over BroadcastChannel and POSTs to server sync)
     if (playbackOutput === 'remote' || playbackOutput === 'both') {
+      const payAnn = { ...item };
+      // If it's custom and is raw, format to server absolute /uploads path for remote stream access
+      if (actIsCustom && !audioSrc.startsWith('http') && !audioSrc.startsWith('/') && !audioSrc.startsWith('blob:')) {
+        payAnn.audioUrl = `/uploads/${encodeURIComponent(item.audioUrl)}`;
+      } else {
+        payAnn.audioUrl = audioSrc;
+      }
+
+      const payload = {
+        announcement: payAnn,
+        isCustom: actIsCustom,
+        volume: isMuted ? 0 : volume / 100,
+        fallbackMode
+      };
+
+      // Dispatches to local tab if open on same browser
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
           type: 'PLAY',
-          payload: {
-            announcement: item,
-            isCustom: actIsCustom,
-            volume: isMuted ? 0 : volume / 100,
-            fallbackMode
-          }
+          payload
         });
-        
-        // Simulating broadcasting activation if receiver is not running
-        if (!isReceiverConnected) {
-          setCurrentBroadcasting(item.title);
-          // Auto clear broadcast indicator after mock duration
-          setTimeout(() => {
-            setCurrentBroadcasting(null);
-          }, (item.duration || 6) * 1000);
-        }
+      }
+
+      // POSTs commands to full-stack backend server for cross-computer synchronization
+      try {
+        await fetch('/api/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        console.warn("Failed syncing play action to server for separate PCs:", err);
+      }
+
+      // Simulate player screen status if offline/unconnected
+      if (!isReceiverConnected) {
+        setCurrentBroadcasting(item.title);
+        setTimeout(() => {
+          setCurrentBroadcasting(null);
+        }, (item.duration || 10) * 1000);
       }
     }
   };
 
-  // Custom File Uploader logic
+  // Custom persistent File Uploader logic
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -266,23 +341,56 @@ export default function OperatorPanel() {
 
     setUploadError('');
     try {
-      await saveAudioFile(file.name, file);
+      // 1. Permanently Upload to the full-stack server
+      const encodedName = encodeURIComponent(file.name);
+      const srvRes = await fetch(`/api/upload?name=${encodedName}`, {
+        method: 'POST',
+        body: file,
+        headers: {
+          'Content-Type': 'application/octet-stream'
+        }
+      });
+      
+      if (!srvRes.ok) {
+        throw new Error("Server rejected binary file upload");
+      }
+
+      // 2. Also save to local browser IndexedDB cache as dynamic standalone fallback
+      try {
+        await saveAudioFile(file.name, file);
+      } catch (dbErr) {
+        console.warn("IndexedDB secondary write omitted:", dbErr);
+      }
+
+      // Reload files list
       await loadCustomFilesFromDB();
 
-      // Notify player screen of new files loaded
+      // Notify player screens
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({ type: 'REFRESH_ASSETS' });
       }
     } catch (err: any) {
-      setUploadError('Falha ao salvar no banco local IndexedDB: ' + (err.message || err));
+      setUploadError('Falha ao salvar seu áudio MP3 no projeto: ' + (err.message || err));
     }
   };
 
-  // Remove uploaded file
+  // Remove uploaded file physically from client and server
   const removeUploadedAudio = async (filename: string) => {
     try {
-      await deleteAudioFile(filename);
+      // 1. Delete from IndexedDB local cache
+      try {
+        await deleteAudioFile(filename);
+      } catch (dbErr) {}
+
+      // 2. Delete permanently from full-stack server project directories
+      try {
+        await fetch(`/api/uploads/${encodeURIComponent(filename)}`, {
+          method: 'DELETE'
+        });
+      } catch (srvErr) {}
+
       await loadCustomFilesFromDB();
+      
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({ type: 'REFRESH_ASSETS' });
       }
@@ -292,7 +400,7 @@ export default function OperatorPanel() {
   };
 
   // Text-To-Speech announcement trigger
-  const playCustomTTS = () => {
+  const playCustomTTS = async () => {
     if (!ttsText.trim()) return;
 
     const mockAnnouncement: Announcement = {
@@ -311,23 +419,33 @@ export default function OperatorPanel() {
     }
 
     if (playbackOutput === 'remote' || playbackOutput === 'both') {
+      const payload = {
+        announcement: mockAnnouncement,
+        isTTS: true,
+        volume: isMuted ? 0 : volume / 100,
+        fallbackMode: true,
+        customText: ttsText
+      };
+
       if (broadcastChannelRef.current) {
         broadcastChannelRef.current.postMessage({
           type: 'PLAY',
-          payload: {
-            announcement: mockAnnouncement,
-            isTTS: true,
-            volume: isMuted ? 0 : volume / 100,
-            fallbackMode: true,
-            customText: ttsText
-          }
+          payload
         });
       }
+
+      try {
+        await fetch('/api/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {}
     }
   };
 
   // General audio stop commands
-  const stopAllAudios = () => {
+  const stopAllAudios = async () => {
     // Stop local
     if (localAudioRef.current) {
       localAudioRef.current.pause();
@@ -338,11 +456,16 @@ export default function OperatorPanel() {
     }
     setCurrentLocalPlaying(null);
 
-    // Stop remote
+    // Stop remote via BroadcastChannel
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.postMessage({ type: 'STOP' });
     }
     setCurrentBroadcasting(null);
+
+    // Stop remote via central Server API
+    try {
+      await fetch('/api/stop', { method: 'POST' });
+    } catch (err) {}
   };
 
   // Queue Operations

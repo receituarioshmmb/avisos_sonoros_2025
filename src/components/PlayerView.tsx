@@ -33,11 +33,66 @@ export default function PlayerView() {
     isAudioUnlockedRef.current = isAudioUnlocked;
   }, [isAudioUnlocked]);
 
+  const lastProcessedTimestampRef = useRef<number>(0);
+
   // Keep currentAnnouncement in a ref to avoid stale closures in the channel listener
   const currentAnnouncementRef = useRef<Announcement | null>(null);
   useEffect(() => {
     currentAnnouncementRef.current = currentAnnouncement;
   }, [currentAnnouncement]);
+
+  // Poll the backend server for commands (enabling cross-PC/multi-device sync)
+  useEffect(() => {
+    let active = true;
+
+    const pollServerState = async () => {
+      try {
+        const titleToSend = currentAnnouncementRef.current?.title || null;
+        // Dual-purpose query: report receiver's live metadata, then receive latest system commands
+        const res = await fetch(`/api/state?active=true&isAudioUnlocked=${isAudioUnlockedRef.current}&playingId=${encodeURIComponent(titleToSend || '')}`);
+        if (!active) return;
+
+        if (res.ok) {
+          const data = await res.json();
+          const serverState = data.state;
+
+          if (serverState && serverState.timestamp > lastProcessedTimestampRef.current) {
+            lastProcessedTimestampRef.current = serverState.timestamp;
+
+            if (serverState.action === 'PLAY') {
+              setVolume(serverState.volume ?? 0.8);
+              setIsTTS(serverState.isTTS || false);
+              setCustomText(serverState.customText || '');
+
+              triggerReceiverPlay(
+                serverState.currentAnnouncement,
+                serverState.currentAnnouncement?.isCustom || serverState.currentAnnouncement?.category === 'custom' || false,
+                serverState.volume,
+                serverState.fallbackMode,
+                serverState.isTTS,
+                serverState.customText
+              );
+            } else if (serverState.action === 'STOP') {
+              stopAllPlayback();
+            } else if (serverState.action === 'SET_VOLUME') {
+              setVolume(serverState.volume ?? 0.8);
+              if (audioRef.current) {
+                audioRef.current.volume = serverState.volume;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // dynamic fail-open during server startup
+      }
+    };
+
+    const interval = setInterval(pollServerState, 800);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Communicate with the Operator tab
   useEffect(() => {
@@ -194,30 +249,47 @@ export default function PlayerView() {
       return;
     }
 
-    // Route B: Custom files fetched from IndexedDB
+    // Route B: Custom files fetched from Server (statically) or local IndexedDB fallback
     if (isCustom) {
       try {
-        const fileBlob = await getAudioFile(announcement.audioUrl);
-        if (!fileBlob) {
-          throw new Error("File not found in local IndexedDB storage.");
+        let finalUrl = announcement.audioUrl;
+        
+        // Ensure path uses /uploads served by fullstack server if it's a raw filename
+        if (!finalUrl.startsWith('http') && !finalUrl.startsWith('/') && !finalUrl.startsWith('blob:')) {
+          finalUrl = `/uploads/${encodeURIComponent(finalUrl)}`;
         }
-        const fileUrl = URL.createObjectURL(fileBlob);
-        const player = new Audio(fileUrl);
+
+        const player = new Audio(finalUrl);
         player.volume = vol;
         audioRef.current = player;
         
         player.onended = onAudioEnded;
-        player.onerror = () => {
-          console.warn(`Local custom audio ${announcement.audioUrl} failed to load. Initiating TTS.`);
-          runSpeechFallback();
+        player.onerror = async () => {
+          console.warn(`Network audio ${finalUrl} failed. Checking local IndexedDB cache fallback...`);
+          try {
+            const fileBlob = await getAudioFile(announcement.audioUrl);
+            if (fileBlob) {
+              const fileUrl = URL.createObjectURL(fileBlob);
+              const fallbackPlayer = new Audio(fileUrl);
+              fallbackPlayer.volume = vol;
+              audioRef.current = fallbackPlayer;
+              fallbackPlayer.onended = onAudioEnded;
+              fallbackPlayer.onerror = runSpeechFallback;
+              fallbackPlayer.play().catch(runSpeechFallback);
+            } else {
+              runSpeechFallback();
+            }
+          } catch (offlineErr) {
+            runSpeechFallback();
+          }
         };
 
-        player.play().catch(err => {
-          console.warn("Blocked by browser autoplay limits. Loading TTS:", err);
+        player.play().catch(async (err) => {
+          console.warn("Blocked by browser autoplay security rules or load error. Loading fallback...", err);
           runSpeechFallback();
         });
       } catch (err) {
-        console.warn("Error looking up custom audio file:", err);
+        console.warn("Error setting up custom audio playing sequence:", err);
         runSpeechFallback();
       }
       return;
