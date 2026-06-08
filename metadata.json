@@ -1,0 +1,6 @@
+{
+  "name": "HMMB Sonorização",
+  "description": "Painel de controle e sonorização hospitalar do HMMB com modo operador e tela secundária sincronizada para transmissão de áudio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
